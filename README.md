@@ -8,6 +8,9 @@ This repository hosts custom plugins for Noctalia Shell. It is intended as a lig
 
 The `registry.json` file serves as the central index and is automatically updated as plugins are added or modified.
 
+## Demo
+![Video](https://github.com/user-attachments/assets/802bbe58-d193-4148-8750-b6fac874e871)
+
 ## Installation
 
 To use plugins from this repository:
