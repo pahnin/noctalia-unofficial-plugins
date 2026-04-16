@@ -36,7 +36,8 @@ A real-time GPU monitoring panel for Linux systems using `nvidia-smi`.
 **Features:**
 
 * GPU temperature, utilization, and memory tracking
-* Live updates (default: 250ms)
+* Live updates (default: 50ms)
+* Toggle between time ranges
 * Time-series graphs for usage metrics
 * Color-coded alerts for thresholds
 * Configurable panel layout and scaling

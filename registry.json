@@ -23,7 +23,7 @@
     {
       "id": "nvidia-gpu-monitoring-plugin",
       "name": "NVIDIA GPU monitor Bar Widget",
-      "version": "2026.04.12",
+      "version": "2026.04.16",
       "official": false,
       "author": "Phanindra Srungavarapu",
       "description": "This plugin provides a bar widget and panel for monitoring NVIDIA GPU usage.",
