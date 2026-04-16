@@ -17,6 +17,14 @@ Item {
   property var gpuMemUsedGB: pluginApi?.mainInstance?.gpuMemUsedGB
   property var gpuMemTotalGB: pluginApi?.mainInstance?.gpuMemTotalGB
   property var gpuName: pluginApi?.mainInstance?.gpuName
+  property var gpuTempHistory: pluginApi.mainInstance.gpuTempHistory
+  property var gpuCoreUtilHistory: pluginApi.mainInstance.gpuCoreUtilHistory 
+  property var gpuMemPercentHistory: pluginApi.mainInstance.gpuMemPercentHistory
+
+  property int selectedDurationSec: 60 // 60, 300, 1800
+  property int targetPoints: 200
+  property int sampleIntervalMs: 50
+
 
   // SmartPanel
   readonly property var geometryPlaceholder: panelContainer
@@ -39,6 +47,51 @@ Item {
       }
     }
   }
+
+  function downsample(data, durationSec) {
+    if (!data || data.length === 0) return []
+
+    let totalSamples = data.length
+    let samplesNeeded = targetPoints
+
+    // How many raw samples per bucket
+    let bucketSize = Math.max(1, Math.floor(totalSamples / samplesNeeded))
+
+    let result = []
+
+    for (let i = 0; i < totalSamples; i += bucketSize) {
+      let chunk = data.slice(i, i + bucketSize)
+
+      let sum = 0
+      for (let j = 0; j < chunk.length; j++) {
+        sum += chunk[j]
+      }
+
+      result.push(sum / chunk.length)
+    }
+
+    return result
+  }
+
+  function getWindow(data, durationSec) {
+    let maxSamples = Math.floor((durationSec * 1000) / sampleIntervalMs)
+    return data.slice(-maxSamples)
+  }
+
+  property var tempGraphData: downsample(
+    getWindow(root.gpuTempHistory, selectedDurationSec),
+    selectedDurationSec
+  )
+
+  property var utilGraphData: downsample(
+    getWindow(root.gpuCoreUtilHistory, selectedDurationSec),
+    selectedDurationSec
+  )
+
+  property var memGraphData: downsample(
+    getWindow(root.gpuMemPercentHistory, selectedDurationSec),
+    selectedDurationSec
+  )
 
   Rectangle {
     id: panelContainer
@@ -68,6 +121,55 @@ Item {
           // spacing: Style.marginM
           Layout.margins: Style.marginM
           Layout.bottomMargin: Style.marginXS
+
+          // Toggle sampling
+          Rectangle {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredHeight: 30
+            Layout.preferredWidth: 180
+            radius: 999
+            color: Color.mSurface
+            border.color: Color.mOutlineVariant
+
+            RowLayout {
+              anchors.fill: parent
+              anchors.margins: Style.marginXS
+              spacing: Style.marginXS
+
+              Repeater {
+                model: [
+                  { label: "1m", value: 60 },
+                  { label: "5m", value: 300 },
+                  { label: "15m", value: 900 },
+                  { label: "30m", value: 1800 }
+                ]
+
+                delegate: Rectangle {
+                  Layout.preferredWidth: 40
+                  Layout.preferredHeight: 24
+                  radius: 999
+                  color: root.selectedDurationSec === modelData.value
+                        ? Color.mPrimary
+                        : "transparent"
+
+                  NText {
+                    anchors.centerIn: parent
+                    text: modelData.label
+                    pointSize: Style.fontSizeXS
+                    color: root.selectedDurationSec === modelData.value
+                          ? Color.mOnPrimary
+                          : Color.mOnSurfaceVariant
+                  }
+
+                  MouseArea {
+                    anchors.fill: parent
+                    onClicked: root.selectedDurationSec = modelData.value
+                  }
+                }
+              }
+            }
+          }
+
           // Header
           RowLayout {
             Layout.fillWidth: true
@@ -145,9 +247,9 @@ Item {
               NGraph {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                values: pluginApi?.mainInstance?.gpuTempHistory || []
-                minValue: Math.min(...(pluginApi?.mainInstance?.gpuTempHistory || [0, 50]), 0) - 5
-                maxValue: Math.max(...(pluginApi?.mainInstance?.gpuTempHistory || [30, 60]), 0) + 5
+                values: tempGraphData || []
+                minValue: 20
+                maxValue: 100
                 color: Color.mPrimary
                 strokeWidth: Math.max(1, Style.uiScaleRatio)
                 fill: true
@@ -196,7 +298,7 @@ Item {
               NGraph {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                values: pluginApi?.mainInstance?.gpuCoreUtilHistory || []
+                values: utilGraphData || []
                 minValue: 0
                 maxValue: 100
                 color: root.gpuCoreUtil > 90 ? "#E53935" : // Critical
@@ -249,7 +351,7 @@ Item {
               NGraph {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                values: pluginApi?.mainInstance?.gpuMemPercentHistory || []
+                values: memGraphData || []
                 minValue: 0
                 maxValue: 100
                 color: root.gpuMemPercent > 90 ? "#E53935" : // Critical

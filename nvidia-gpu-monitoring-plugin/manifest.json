@@ -1,7 +1,7 @@
 {
   "id": "nvidia-gpu-monitoring-plugin",
   "name": "NVIDIA GPU monitor Bar Widget",
-  "version": "2026.04.12",
+  "version": "2026.04.16",
   "minNoctaliaVersion": "4.1.2",
   "author": "Phanindra Srungavarapu",
   "official": false,
