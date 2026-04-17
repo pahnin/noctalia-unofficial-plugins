@@ -23,7 +23,11 @@ Item {
   }
   // Cycle tabs programmatically (called by child views when Tab is pressed)
   function cycleTab(backwards) {
-    // TODO: re implement once conversations are implemented
+    if(backwards) {
+      mainInstance.tabBackward();
+    } else {
+      mainInstance.tabForward();
+    }
   }
 
   property var pluginApi: null
@@ -50,6 +54,7 @@ Item {
   readonly property var mainInstance: pluginApi?.mainInstance
   property bool isGenerating: mainInstance?.isGenerating
   property var convs: mainInstance?.conversations
+  property var memoryStore: mainInstance?.memoryStore
 
   // Calculate anchoring based on position
   readonly property bool panelAnchorTop: panelPosition.startsWith("top")
@@ -110,7 +115,7 @@ Item {
           clip: true
           flickableDirection: Flickable.HorizontalFlick
           boundsBehavior: Flickable.StopAtBounds
-          // interactive: true
+          interactive: true
 
           Row {
             id: tabRow
@@ -128,9 +133,9 @@ Item {
                 label: "Chat " + (Number(modelData) + 1)
 
                 tooltipText: {
-                  var msgs = convs[modelData]
-                  if (!msgs || msgs.length === 0) return "Empty chat"
-                  return msgs[msgs.length - 1].content
+                  var convMemory = memoryStore[Number(modelData)]
+                  var content = convMemory ? convMemory.summary : ""
+                  return content ? content.substring(0, 250) + (content.length > 250 ? "...": "") : ""
                 }
                 isActive: mainInstance.activeConversationIndex === Number(modelData)
                 onClicked: mainInstance.switchConversation(Number(modelData))
