@@ -4,7 +4,7 @@
     {
       "id": "noctalia-ollama-assistant",
       "name": "Ollama Chat Panel",
-      "version": "2026.04.17",
+      "version": "2026.04.22",
       "official": false,
       "author": "phanindra srungavarapu",
       "description": "Lightweight openwebui replacement to have multiple AI conversations on ollama",

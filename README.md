@@ -11,7 +11,7 @@ The `registry.json` file serves as the central index and is automatically update
 ## Demo
 ![Video](https://github.com/user-attachments/assets/802bbe58-d193-4148-8750-b6fac874e871)
 ![Video](https://github.com/user-attachments/assets/44d77cc5-de37-482a-bf1e-e46e57de223e)
-
+![Video](https://github.com/user-attachments/assets/1f848bbb-d330-4d32-aa75-5605e59d3796)
 ## Installation
 
 To use plugins from this repository:
