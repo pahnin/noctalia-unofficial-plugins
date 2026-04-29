@@ -4,7 +4,7 @@
     {
       "id": "noctalia-ollama-assistant",
       "name": "Ollama Chat Panel",
-      "version": "2026.04.23",
+      "version": "2026.04.29",
       "official": false,
       "author": "phanindra srungavarapu",
       "description": "Lightweight openwebui replacement to have multiple AI conversations on ollama",
@@ -18,7 +18,7 @@
         "Productivity",
         "Network"
       ],
-      "lastUpdated": "2026-04-12T00:00:00Z"
+      "lastUpdated": "2026-04-29T00:00:00Z"
     },
     {
       "id": "nvidia-gpu-monitoring-plugin",
@@ -35,7 +35,7 @@
         "gpu",
         "bar"
       ],
-      "lastUpdated": "2026-04-12T00:00:00Z"
+      "lastUpdated": "2026-04-16T00:00:00Z"
     }
   ]
 }
