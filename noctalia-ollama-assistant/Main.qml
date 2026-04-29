@@ -5,6 +5,7 @@ import qs.Commons
 import qs.Services.UI
 import "ProviderLogic.js" as ProviderLogic
 import "Constants.js" as Constants
+import "Storage.js" as Storage
 
 Item {
   // Internal flag to prevent duplicate error messages
@@ -24,13 +25,16 @@ Item {
   property bool isManuallyStopped: false
   property int requestConversationIndex: -1
 
-  // Cache directory for state (messages) - use global noctalia cache
-  readonly property string cacheDir: typeof Settings !== 'undefined' && Settings.cacheDir ? Settings.cacheDir + "plugins/ollama-assistant/" : ""
-  readonly property string stateCachePath: cacheDir + "state.json"
 
   property string chatInputText: "" // Chat input state - persisted to cache
   property int chatInputCursorPosition: 0 // Chat input cursor position - persisted to cache
 
+  property bool sqliteAvailable: false
+  readonly property string sqliteDbPath: {
+    if (typeof Settings !== "undefined" && Settings.cacheDir)
+      return Settings.cacheDir + "plugins/ollama-assistant/state.db";
+    return "";
+  }
   // Provider configurations
   readonly property var provider: {
     "name": "OpenAI Compatible",
@@ -64,60 +68,110 @@ Item {
 
   Component.onCompleted: {
     Logger.d("OllamaAssistant", "Plugin initialized");
-    // State loading is handled by FileView onLoaded
-    ensureCacheDir();
+
+    Storage.init({
+      dbPath: sqliteDbPath,
+      execSql: function(query, callback) {
+        Logger.d("OllamaAssistant", "ExecSQL in main.qml");
+        if (!sqliteDbPath) {
+          callback(null, "no db path");
+          return;
+        }
+
+        var dir = sqliteDbPath.substring(0, sqliteDbPath.lastIndexOf("/"));
+        Quickshell.execDetached(["mkdir", "-p", dir]);
+        var slicedQ = query.slice(0, 100);
+        Logger.d("OllamaAssistant", "[SQL] Exec request truncated query:"+ slicedQ);
+        Logger.d("OllamaAssistant", "[SQL] Process running: "+ sqliteProcess.running);
+
+        sqliteProcess.buffer = "";
+        sqliteProcess.callback = callback;
+        Logger.d("OllamaAssistant", "DB path: "+ sqliteDbPath)
+
+        sqliteProcess.command = [
+          "sqlite3",
+          "-json",
+          sqliteDbPath,
+          query
+        ];
+        sqliteProcess.running = true;
+      }
+
+    }, function(result) {
+      sqliteAvailable = result.sqliteAvailable;
+
+      Storage.loadState(function(content, error) {
+        if (error) {
+          Logger.e("OllamaAssistant", "Load failed: " + error);
+          return;
+        }
+
+        var result = ProviderLogic.processLoadedState(content);
+        if (!result || result.error) return;
+
+        root.conversations = result.conversations;
+        root.activeConversationIndex = result.activeConversationIndex;
+        root.messages = root.conversations[root.activeConversationIndex].messages || [];
+        root.chatInputText = result.chatInputText;
+        root.chatInputCursorPosition = result.chatInputCursorPosition;
+        root.memoryStore = result.memoryStore;
+      });
+    });
   }
 
-  // Ensure cache directory exists
-  function ensureCacheDir() {
-    if (cacheDir) {
-      Quickshell.execDetached(["mkdir", "-p", cacheDir]);
-    }
-  }
+  // =====================
+  // SQLITE PROCESS
+  // =====================
+  Process {
+    id: sqliteProcess
 
-  // FileView for state cache (messages)
-  FileView {
-    id: stateCacheFile
-    path: root.stateCachePath
-    watchChanges: false
+    property string buffer: ""
+    property string errorBuffer: ""
+    property var callback: null
 
-    onLoaded: {
-      loadStateFromCache();
-    }
-
-    onLoadFailed: function (error) {
-      if (error === 2) {
-        // File doesn't exist, start fresh
-        Logger.d("OllamaAssistant", "No cache file found, starting fresh");
-      } else {
-        Logger.e("OllamaAssistant", "Failed to load state cache: " + error);
+    stdout: SplitParser {
+      onRead: function (data) {
+        sqliteProcess.buffer += data;
       }
     }
-  }
 
-  // Load state from cache file
-  function loadStateFromCache() {
-    var content = stateCacheFile.text();
-    Logger.d("OllamaAssistant", "before calling processLoadedState");
-    var result = ProviderLogic.processLoadedState(content);
-
-    if (!result) {
-      Logger.d("OllamaAssistant", "Empty cache file, starting fresh");
-      return;
+    stderr: SplitParser {
+      onRead: function (data) {
+        sqliteProcess.errorBuffer += data;
+      }
     }
 
-    if (result.error) {
-      Logger.e("OllamaAssistant", "Failed to parse state cache: " + result.error);
-      return;
-    }
+    onExited: function (exitCode) {
+      var cb = sqliteProcess.callback;
+      var output = sqliteProcess.buffer;
+      var errOut = sqliteProcess.errorBuffer;
 
-    root.conversations = result.conversations;
-    root.activeConversationIndex = result.activeConversationIndex;
-    root.messages = root.conversations[root.activeConversationIndex].messages || [];
-    root.chatInputText = result.chatInputText;
-    root.chatInputCursorPosition = result.chatInputCursorPosition;
-    root.memoryStore = result.memoryStore; 
-    Logger.d("OllamaAssistant", "Loaded " + root.messages.length + " messages from cache");
+      Logger.d("OllamaAssistant", "SQL Exited. Callback exists?", !!cb);
+      var logOutput = output.slice(0, 100);
+      Logger.d("OllamaAssistant", "SQL RAW OUTPUT: (truncated)", logOutput);
+      if(errOut.trim() !== "") {
+        Logger.e("OllamaAssistant", "SQL STDERR:", errOut);
+      }
+      sqliteProcess.buffer = "";
+      sqliteProcess.errorBuffer = "";
+      sqliteProcess.callback = null;
+
+      if (!cb) return;
+
+      if (exitCode !== 0) {
+        cb(null, errOut || "sqlite failed");
+        return;
+      }
+
+      try {
+        var parsed = output && output.trim() !== ""
+          ? JSON.parse(output)
+          : [];
+        cb(parsed, null);
+      } catch (e) {
+        cb(null, "parse error");
+      }
+    }
   }
 
   // Debounced save timer
@@ -135,14 +189,12 @@ Item {
   }
 
   function performSaveState() {
-    if (!saveStateQueued || !cacheDir)
+    if (!saveStateQueued)
       return;
+
     saveStateQueued = false;
 
     try {
-      ensureCacheDir();
-
-      var maxHistory = pluginApi?.pluginSettings?.maxHistoryLength || 100;
       var dataStr = ProviderLogic.prepareStateForSave(
         root.conversations,
         root.memoryStore,
@@ -151,7 +203,8 @@ Item {
         root.chatInputCursorPosition
       );
 
-      stateCacheFile.setText(dataStr);
+      Storage.saveState(dataStr);
+
     } catch (e) {
       Logger.e("OllamaAssistant", "Failed to save state cache: " + e);
     }
